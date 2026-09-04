@@ -1,0 +1,334 @@
+from pathlib import Path
+
+import numpy as np
+import streamlit as st
+import tensorflow as tf
+from PIL import Image
+from tensorflow.keras.applications.mobilenet_v3 import preprocess_input
+
+
+# -------------------------------------------------
+# Page configuration
+# -------------------------------------------------
+st.set_page_config(
+    page_title="Eye Disease Classification",
+    page_icon="👁️",
+    layout="centered"
+)
+
+
+# -------------------------------------------------
+# Model configuration
+# -------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent
+
+# Model file name එක වෙනස් නම් මෙතන වෙනස් කරන්න
+MODEL_PATH = BASE_DIR / "Trained_Eye_disease_model.keras"
+
+# Training කරපු class order එකටම මෙය තිබිය යුතුයි
+CLASS_NAMES = [
+    "Cataract",
+    "Conjunctivitis",
+    "Healthy"
+]
+
+# Training වෙලාවේ භාවිතා කළ image size එක
+IMAGE_SIZE = (224, 224)
+
+
+# -------------------------------------------------
+# Load TensorFlow model
+# -------------------------------------------------
+@st.cache_resource
+def load_trained_model():
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
+
+    return tf.keras.models.load_model(
+        str(MODEL_PATH),
+        compile=False
+    )
+
+
+# -------------------------------------------------
+# Model prediction
+# -------------------------------------------------
+def model_prediction(uploaded_image):
+    model = load_trained_model()
+
+    # Image එක RGB format එකට convert කර resize කිරීම
+    image = uploaded_image.convert("RGB")
+    image = image.resize(IMAGE_SIZE)
+
+    # PIL image එක NumPy array එකකට convert කිරීම
+    image_array = np.asarray(image, dtype=np.float32)
+
+    # Batch dimension එක add කිරීම
+    image_array = np.expand_dims(image_array, axis=0)
+
+    # MobileNetV3 preprocessing
+    image_array = preprocess_input(image_array)
+
+    # Prediction
+    predictions = model.predict(image_array, verbose=0)[0]
+
+    if len(predictions) != len(CLASS_NAMES):
+        raise ValueError(
+            f"Model output classes: {len(predictions)}, "
+            f"but CLASS_NAMES contains: {len(CLASS_NAMES)} classes."
+        )
+
+    # Model output එක probabilities නොවේ නම් softmax apply කිරීම
+    if (
+        np.all(predictions >= 0)
+        and np.all(predictions <= 1)
+        and np.isclose(np.sum(predictions), 1.0, atol=1e-3)
+    ):
+        probabilities = predictions
+    else:
+        probabilities = tf.nn.softmax(predictions).numpy()
+
+    predicted_index = int(np.argmax(probabilities))
+    confidence = float(probabilities[predicted_index])
+
+    return predicted_index, confidence, probabilities
+
+
+# -------------------------------------------------
+# Sidebar
+# -------------------------------------------------
+st.sidebar.title("Dashboard")
+
+app_mode = st.sidebar.selectbox(
+    "Select Page",
+    ["Home", "About", "Disease Identification"]
+)
+
+
+# -------------------------------------------------
+# Home Page
+# -------------------------------------------------
+if app_mode == "Home":
+    st.title("👁️ Eye Disease Classification Platform")
+
+    st.markdown(
+        """
+        ### Welcome
+
+        Eye Diseases Detectable by This Application:
+
+        - **Cataract**
+        - **Conjunctivitis**
+        - **Healthy**
+
+        ### How to use the application
+
+        1. Open the **Disease Identification** page.
+        2. Upload a clear eye image.
+        3. Click the **Predict** button.
+        4. View the predicted class and confidence score.
+
+        ---
+
+        ### Eye Conditions
+
+        #### Cataract
+        Cataract is the clouding of the natural lens of the eye.
+        It may cause blurry vision, faded colours and difficulty seeing at
+        night.
+
+        #### Conjunctivitis
+        Conjunctivitis is inflammation of the conjunctiva. It may cause
+        redness, irritation, watering or discharge from the eye.
+
+        #### Healthy
+        A healthy prediction means that the model did not identify the
+        cataract or conjunctivitis patterns it was trained to recognize.
+        """
+    )
+
+    st.warning(
+        "This application is for educational and research purposes only. "
+        "It is not a replacement for a diagnosis by a qualified eye-care "
+        "professional."
+    )
+
+
+# -------------------------------------------------
+# About Page
+# -------------------------------------------------
+elif app_mode == "About":
+    st.header("About the Project")
+
+    st.markdown(
+        """
+        ### Eye Disease Classification
+
+        This project uses a TensorFlow deep learning model to classify
+        uploaded eye images.
+
+        The dataset contains three classes:
+
+        - **Cataract**
+        - **Conjunctivitis**
+        - **Healthy**
+
+        
+
+        
+
+        The trained model predicts the most likely class for an uploaded
+        image and displays a confidence score.
+
+        ---
+
+        **Important:** The prediction is generated by an artificial
+        intelligence model and should not be considered a confirmed
+        medical diagnosis.
+        """
+    )
+
+
+# -------------------------------------------------
+# Disease Identification Page
+# -------------------------------------------------
+elif app_mode == "Disease Identification":
+    st.header("Eye Disease Identification")
+
+    st.write(
+        "Upload a clear image of the eye to classify it as "
+        "Cataract, Conjunctivitis or Healthy."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Upload an eye image",
+        type=["jpg", "jpeg", "png"]
+    )
+
+    if uploaded_file is not None:
+        uploaded_image = Image.open(uploaded_file)
+
+        st.image(
+            uploaded_image,
+            caption="Uploaded eye image",
+            use_container_width=True
+        )
+
+        if st.button("Predict", type="primary"):
+            try:
+                with st.spinner("Analyzing the image..."):
+                    result_index, confidence, probabilities = (
+                        model_prediction(uploaded_image)
+                    )
+
+                predicted_class = CLASS_NAMES[result_index]
+
+                st.success(f"Predicted class: {predicted_class}")
+                st.write(f"Confidence: **{confidence * 100:.2f}%**")
+                st.progress(confidence)
+
+                # Show class probabilities
+                with st.expander("View prediction probabilities"):
+                    for class_name, probability in zip(
+                        CLASS_NAMES, probabilities
+                    ):
+                        st.write(
+                            f"**{class_name}:** "
+                            f"{float(probability) * 100:.2f}%"
+                        )
+
+                # Recommendation section
+                with st.expander("Learn More", expanded=True):
+
+                    if predicted_class == "Cataract":
+                        st.subheader("Cataract")
+
+                        st.write(
+                            """
+                            The model detected features associated with
+                            cataract. Cataract is a clouding of the natural
+                            lens of the eye.
+                            """
+                        )
+
+                        st.markdown(
+                            """
+                            **Possible symptoms:**
+
+                            - Blurred or cloudy vision
+                            - Difficulty seeing at night
+                            - Sensitivity to bright light
+                            - Faded colours
+                            - Frequent changes in glasses prescription
+
+                            **Recommendation:**
+
+                            Consult an ophthalmologist for a complete eye
+                            examination and professional diagnosis.
+                            """
+                        )
+
+                    elif predicted_class == "Conjunctivitis":
+                        st.subheader("Conjunctivitis")
+
+                        st.write(
+                            """
+                            The model detected features associated with
+                            conjunctivitis, which is inflammation of the
+                            conjunctiva.
+                            """
+                        )
+
+                        st.markdown(
+                            """
+                            **Possible symptoms:**
+
+                            - Redness of the eye
+                            - Itching or irritation
+                            - Watery eyes
+                            - Eye discharge
+                            - Swollen eyelids
+
+                            **Recommendation:**
+
+                            Avoid rubbing the eyes, wash hands regularly and
+                            avoid sharing towels. Consult a healthcare
+                            professional, especially if there is pain,
+                            reduced vision or severe discharge.
+                            """
+                        )
+
+                    elif predicted_class == "Healthy":
+                        st.subheader("Healthy")
+
+                        st.write(
+                            """
+                            The model did not detect the cataract or
+                            conjunctivitis patterns it was trained to
+                            recognize.
+                            """
+                        )
+
+                        st.markdown(
+                            """
+                            **General eye-care recommendations:**
+
+                            - Have regular eye examinations
+                            - Protect eyes from excessive sunlight
+                            - Maintain good eye hygiene
+                            - Avoid rubbing the eyes
+                            - Seek medical advice if symptoms are present
+
+                            A healthy model prediction does not guarantee
+                            that every possible eye condition is absent.
+                            """
+                        )
+
+                st.warning(
+                    "This is an AI-generated result for educational "
+                    "purposes. Consult a qualified medical professional "
+                    "for an accurate diagnosis."
+                )
+
+            except Exception as error:
+                st.error(f"Prediction failed: {error}")
