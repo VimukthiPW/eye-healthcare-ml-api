@@ -4,10 +4,12 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY ml_api.py .
+COPY Trained_Eye_disease_model.keras .
+COPY Eye_NonEye_Validator.keras .
 
 ENV PYTHONUNBUFFERED=1
 

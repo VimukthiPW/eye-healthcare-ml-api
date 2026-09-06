@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+.ipynb_checkpoints/
+*.ipynb
+train/
+val/
+test/
+eye_validation_dataset/
+eye_validation_split/
+training_history.pkl
+*.h5
+.git/
+.github/
+.expo/
+node_modules/
