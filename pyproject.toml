@@ -1,2 +1,14 @@
+[project]
+name = "eye-healthcare-ml-api"
+version = "1.0.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "Flask",
+    "tensorflow",
+    "numpy",
+    "Pillow",
+    "gunicorn"
+]
+
 [tool.vercel]
 entrypoint = "ml_api:app"
